@@ -19,28 +19,23 @@ print(f"✅ Test MAE: {model_info['test_mae']:.2f} minutes")
 
 def prepare_input_features(input_data):
     """Prepare input data for prediction"""
-    
-    # Create a DataFrame with the input
     df = pd.DataFrame([input_data])
-    
-    # Calculate distance if coordinates are provided
+
     if all(k in input_data for k in ['restaurant_lat', 'restaurant_lon', 'delivery_lat', 'delivery_lon']):
         df['Distance_km'] = np.sqrt(
             (input_data['restaurant_lat'] - input_data['delivery_lat'])**2 +
             (input_data['restaurant_lon'] - input_data['delivery_lon'])**2
         ) * 111
-    
-    # Extract time features
+
     current_time = datetime.now()
     order_hour = int(input_data.get('order_hour', current_time.hour))
-    
+
     df['Order_hour'] = order_hour
     df['Day_of_week'] = current_time.weekday()
     df['Month'] = current_time.month
     df['Is_weekend'] = 1 if current_time.weekday() >= 5 else 0
     df['Is_peak_hour'] = 1 if (12 <= order_hour <= 14) or (19 <= order_hour <= 21) else 0
-    
-    # Time period
+
     if 6 <= order_hour < 12:
         df['Time_period'] = 'Morning'
     elif 12 <= order_hour < 17:
@@ -49,8 +44,7 @@ def prepare_input_features(input_data):
         df['Time_period'] = 'Evening'
     else:
         df['Time_period'] = 'Night'
-    
-    # Age group
+
     age = input_data.get('delivery_person_age', 30)
     if age <= 25:
         df['Age_group'] = 'Young'
@@ -58,8 +52,7 @@ def prepare_input_features(input_data):
         df['Age_group'] = 'Middle'
     else:
         df['Age_group'] = 'Senior'
-    
-    # Rating category
+
     rating = input_data.get('delivery_person_ratings', 4.5)
     if rating <= 4.0:
         df['Rating_category'] = 'Average'
@@ -67,11 +60,9 @@ def prepare_input_features(input_data):
         df['Rating_category'] = 'Good'
     else:
         df['Rating_category'] = 'Excellent'
-    
-    # Create feature dataframe with all required features
+
     X = pd.DataFrame(columns=feature_columns)
-    
-    # Map input to features
+
     feature_mapping = {
         'Distance_km': df['Distance_km'].values[0] if 'Distance_km' in df else input_data.get('distance_km', 5),
         'Delivery_person_Age': input_data.get('delivery_person_age', 30),
@@ -92,48 +83,36 @@ def prepare_input_features(input_data):
         'Age_group': df['Age_group'].values[0],
         'Rating_category': df['Rating_category'].values[0]
     }
-    
-    # Fill the feature dataframe
+
     for feature in feature_columns:
         X[feature] = [feature_mapping.get(feature, 0)]
-    
-    # Encode categorical variables
+
     for col in X.select_dtypes(include=['object']).columns:
         if col in label_encoders:
             try:
                 X[col] = label_encoders[col].transform(X[col].astype(str))
             except:
                 X[col] = 0
-    
+
     return X
 
 @app.route('/')
 def home():
-    """Home page"""
     return render_template('index.html', model_info=model_info)
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """Make prediction"""
     try:
-        # Get input data
         input_data = request.get_json()
-        
-        # Prepare features
         X = prepare_input_features(input_data)
-        
-        # Make prediction
         prediction = model.predict(X)[0]
-        prediction = max(15, min(90, prediction))  # Clip to realistic range
-        
-        # Calculate confidence interval
-        uncertainty = 3  # ±3 minutes
-        
-        # Convert predictions to native Python floats for JSON serialization
+        prediction = max(15, min(90, prediction))
+        uncertainty = 3
+
         predicted_time = float(round(prediction, 1))
         predicted_time_min = float(round(prediction - uncertainty, 1))
         predicted_time_max = float(round(prediction + uncertainty, 1))
-        
+
         response = {
             'success': True,
             'predicted_time': predicted_time,
@@ -141,18 +120,13 @@ def predict():
             'predicted_time_max': predicted_time_max,
             'message': f'Estimated delivery time: {int(predicted_time)} minutes'
         }
-        
         return jsonify(response)
-    
+
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 400
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/model-info')
 def get_model_info():
-    """Get model information"""
     return jsonify({
         'model_name': model_info['best_model_name'],
         'test_mae': round(model_info['test_mae'], 2),
@@ -163,10 +137,11 @@ def get_model_info():
 
 @app.route('/health')
 def health():
-    """Health check endpoint"""
     return jsonify({'status': 'healthy', 'model_loaded': True})
 
 if __name__ == '__main__':
+    import os
+    port = int(os.environ.get('PORT', 5000))
     print("\n" + "="*70)
     print("🚀 FOOD DELIVERY TIME PREDICTION API")
     print("="*70)
@@ -176,7 +151,6 @@ if __name__ == '__main__':
     print(f"Accuracy (±5 min): {model_info['test_accuracy']:.2f}%")
     print("="*70)
     print("\n🌐 Starting Flask server...")
-    print("📱 Access the app at: http://127.0.0.1:5000")
+    print(f"📱 Access the app at: http://0.0.0.0:{port}")
     print("\n")
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=port)
