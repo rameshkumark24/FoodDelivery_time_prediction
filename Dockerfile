@@ -1,31 +1,29 @@
-# Use official lightweight Python image
-FROM python:3.10-slim
+FROM python:3.9-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system-level dependencies
 RUN apt-get update && apt-get install -y gcc curl && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip core tools
 RUN pip install --upgrade pip setuptools wheel
 
-# Copy project files
-COPY . .
+COPY requirements.txt .
 
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the app port
+# Print numpy/pandas version in build log
+RUN python -c "import numpy; print('Docker numpy version:', numpy.__version__)"
+RUN python -c "import pandas; print('Docker pandas version:', pandas.__version__)"
+
+COPY . .
+
+RUN mkdir -p models templates visualizations
+
 EXPOSE 5000
 
-# Set environment variables
 ENV FLASK_APP=app.py
 ENV PYTHONUNBUFFERED=1
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5000/health || exit 1
 
-# Run using Gunicorn (production server)
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--timeout", "120", "app:app"]
