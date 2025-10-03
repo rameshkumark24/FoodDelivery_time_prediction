@@ -1,7 +1,9 @@
 services:
   - type: web
-    name: food-delivery-ml-app
+    name: food-delivery-time-prediction
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT app:app
     pythonVersion: 3.13.4
+    buildCommand: |
+      pip install --upgrade pip setuptools wheel
+      pip install -r requirements.txt
+    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT app:app
