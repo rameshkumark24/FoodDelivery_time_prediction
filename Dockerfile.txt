@@ -21,7 +21,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies
 RUN pip install --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
@@ -30,7 +29,6 @@ RUN pip install --upgrade pip setuptools wheel \
 # ============================================
 COPY . .
 
-# Create necessary directories (in case your app saves anything)
 RUN mkdir -p models templates static visualizations
 
 # ============================================
