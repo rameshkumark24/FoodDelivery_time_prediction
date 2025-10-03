@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Delivery Time Predictor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .model-info {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: white;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+
+        .model-info div {
+            margin: 5px 15px;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 968px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result-container {
+            margin-top: 20px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            display: none;
+        }
+
+        .result-container.show {
+            display: block;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .prediction-time {
+            font-size: 3em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            margin: 15px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .prediction-range {
+            text-align: center;
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+        }
+
+        .info-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .info-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .feature-item {
+            background: #f5f7fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .feature-item strong {
+            display: block;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .tips-card {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .tips-card h3 {
+            color: #d35400;
+            margin-bottom: 15px;
+        }
+
+        .tips-card ul {
+            list-style-position: inside;
+            color: #555;
+        }
+
+        .tips-card li {
+            margin: 8px 0;
+            padding-left: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            padding: 20px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🍕 Food Delivery Time Predictor</h1>
+            <p>AI-Powered Delivery Time Estimation</p>
+        </div>
+
+        <div class="model-info">
+            <div>
+                <strong>Model:</strong> {{ model_info.best_model_name }}
+            </div>
+            <div>
+                <strong>Accuracy:</strong> {{ "%.2f"|format(model_info.test_r2 * 100) }}%
+            </div>
+            <div>
+                <strong>Avg Error:</strong> ±{{ "%.1f"|format(model_info.test_mae) }} min
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="card">
+                <h2>Delivery Details</h2>
+                <form id="predictionForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="distance">Distance (km)</label>
+                            <input type="number" id="distance" name="distance" step="0.1" min="0.1" max="50" value="5" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="weather">Weather Conditions</label>
+                            <select id="weather" name="weather">
+                                <option value="Sunny">☀️ Sunny</option>
+                                <option value="Cloudy">☁️ Cloudy</option>
+                                <option value="Rainy">🌧️ Rainy</option>
+                                <option value="Fog">🌫️ Fog</option>
+                                <option value="Stormy">⛈️ Stormy</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="traffic">Traffic Density</label>
+                            <select id="traffic" name="traffic">
+                                <option value="Low">🟢 Low</option>
+                                <option value="Medium" selected>🟡 Medium</option>
+                                <option value="High">🟠 High</option>
+                                <option value="Jam">🔴 Traffic Jam</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="vehicle">Vehicle Type</label>
+                            <select id="vehicle" name="vehicle">
+                                <option value="motorcycle" selected>🏍️ Motorcycle</option>
+                                <option value="scooter">🛵 Scooter</option>
+                                <option value="bicycle">🚲 Bicycle</option>
+                                <option value="electric_scooter">⚡ Electric Scooter</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="order_type">Order Type</label>
+                            <select id="order_type" name="order_type">
+                                <option value="Snack">🍿 Snack</option>
+                                <option value="Meal" selected>🍽️ Meal</option>
+                                <option value="Drinks">🥤 Drinks</option>
+                                <option value="Buffet">🍱 Buffet</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="city">City Type</label>
+                            <select id="city" name="city">
+                                <option value="Urban" selected>🏙️ Urban</option>
+                                <option value="Semi-Urban">🏘️ Semi-Urban</option>
+                                <option value="Metropolitan">🌆 Metropolitan</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="preparation_time">Preparation Time (min)</label>
+                            <input type="number" id="preparation_time" name="preparation_time" min="5" max="60" value="20" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="delivery_person_age">Delivery Person Age</label>
+                            <input type="number" id="delivery_person_age" name="delivery_person_age" min="18" max="60" value="30" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="delivery_person_ratings">Delivery Person Rating</label>
+                            <input type="number" id="delivery_person_ratings" name="delivery_person_ratings" step="0.1" min="1" max="5" value="4.5" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="festival">Festival Day?</label>
+                            <select id="festival" name="festival">
+                                <option value="No" selected>No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit">🔮 Predict Delivery Time</button>
+                </form>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Calculating delivery time...</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Prediction Results</h2>
+                <div id="resultsPlaceholder" style="text-align: center; padding: 50px 20px; color: #999;">
+                    <svg width="100" height="100" viewBox="0 0 100 100" style="opacity: 0.3;">
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="#667eea" stroke-width="3"/>
+                        <path d="M50 20 L50 50 L70 50" stroke="#667eea" stroke-width="3" fill="none"/>
+                    </svg>
+                    <p style="margin-top: 20px;">Fill in the details and click predict to see results</p>
+                </div>
+
+                <div class="result-container" id="resultContainer">
+                    <h3 style="text-align: center; color: #667eea; margin-bottom: 10px;">Estimated Delivery Time</h3>
+                    <div class="prediction-time" id="predictionTime">--</div>
+                    <div class="prediction-range" id="predictionRange">--</div>
+
+                    <div class="info-section">
+                        <h3>Input Summary</h3>
+                        <div class="feature-grid" id="featureGrid"></div>
+                    </div>
+                </div>
+
+                <div class="tips-card">
+                    <h3>💡 Tips for Faster Delivery</h3>
+                    <ul>
+                        <li>Order during non-peak hours (avoid 12-2 PM & 7-9 PM)</li>
+                        <li>Choose nearby restaurants to reduce distance</li>
+                        <li>Consider weather and traffic conditions</li>
+                        <li>Simple orders are usually prepared faster</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Built with Machine Learning | Prediction Model: {{ model_info.best_model_name }}</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">© 2025 Food Delivery Time Predictor</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('resultContainer').classList.remove('show');
+            document.getElementById('resultsPlaceholder').style.display = 'none';
+
+            // Get form data
+            const formData = {
+                distance_km: parseFloat(document.getElementById('distance').value),
+                weather: document.getElementById('weather').value,
+                traffic: document.getElementById('traffic').value,
+                vehicle: document.getElementById('vehicle').value,
+                order_type: document.getElementById('order_type').value,
+                city: document.getElementById('city').value,
+                preparation_time: parseInt(document.getElementById('preparation_time').value),
+                delivery_person_age: parseInt(document.getElementById('delivery_person_age').value),
+                delivery_person_ratings: parseFloat(document.getElementById('delivery_person_ratings').value),
+                festival: document.getElementById('festival').value,
+                order_hour: new Date().getHours()
+            };
+
+            try {
+                // Make prediction
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                // Hide loading
+                document.getElementById('loading').classList.remove('show');
+
+                if (result.success) {
+                    // Show results
+                    document.getElementById('predictionTime').textContent = 
+                        Math.round(result.predicted_time) + ' min';
+                    document.getElementById('predictionRange').textContent = 
+                        `Expected range: ${Math.round(result.predicted_time_min)} - ${Math.round(result.predicted_time_max)} minutes`;
+
+                    // Update feature grid
+                    const featureGrid = document.getElementById('featureGrid');
+                    featureGrid.innerHTML = `
+                        <div class="feature-item">
+                            <strong>Distance</strong>
+                            ${formData.distance_km} km
+                        </div>
+                        <div class="feature-item">
+                            <strong>Weather</strong>
+                            ${formData.weather}
+                        </div>
+                        <div class="feature-item">
+                            <strong>Traffic</strong>
+                            ${formData.traffic}
+                        </div>
+                        <div class="feature-item">
+                            <strong>Vehicle</strong>
+                            ${formData.vehicle}
+                        </div>
+                        <div class="feature-item">
+                            <strong>Order Type</strong>
+                            ${formData.order_type}
+                        </div>
+                        <div class="feature-item">
+                            <strong>Preparation Time</strong>
+                            ${formData.preparation_time} min
+                        </div>
+                    `;
+
+                    document.getElementById('resultContainer').classList.add('show');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                document.getElementById('loading').classList.remove('show');
+                alert('Error making prediction: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>
