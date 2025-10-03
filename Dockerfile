@@ -34,4 +34,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5000/health || exit 1
 
 # Start Gunicorn, listening on all interfaces and the port Render specifies
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:$PORT", "--timeout", "120", "app:app"]
+CMD ["sh", "-c", "gunicorn -w 4 -b 0.0.0.0:$PORT --timeout 120 app:app"]
