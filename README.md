@@ -1,8 +1,8 @@
-# 🍕 Food Delivery Time Prediction - Complete Project
+Food Delivery Time Prediction
 
 A production-ready machine learning web application that predicts food delivery times using multiple features like distance, weather, traffic, and delivery person ratings.
 
-## 📊 Project Highlights
+Project Highlights
 
 - **High Accuracy Model**: Achieves 90%+ accuracy with ±3-5 minutes prediction error
 - **Multiple ML Algorithms**: Compares Random Forest, XGBoost, LightGBM, and Gradient Boosting
@@ -10,7 +10,7 @@ A production-ready machine learning web application that predicts food delivery 
 - **Real-time Predictions**: Instant delivery time estimates
 - **No Authentication Required**: Simple, ready-to-use application
 
-## 🎯 Features
+Features
 
 ✅ Multi-factor analysis (16+ features)
 ✅ Weather & traffic impact prediction
@@ -22,10 +22,8 @@ A production-ready machine learning web application that predicts food delivery 
 ✅ Comprehensive data visualizations
 
 ---
+Project Structure
 
-## 📁 Project Structure
-
-```
 food_delivery_prediction/
 │
 ├── 1_generate_data.py          # Dataset generation
@@ -52,22 +50,17 @@ food_delivery_prediction/
 └── data/                        # Generated datasets
     ├── food_delivery_data.csv
     └── food_delivery_processed.csv
-```
-
 ---
 
-## 🚀 Quick Start Guide
+Quick Start Guide
 
-### Step 1: Clone or Create Project Directory
+Step 1: Clone or Create Project Directory
 
-```bash
 mkdir food_delivery_prediction
 cd food_delivery_prediction
-```
 
-### Step 2: Create Virtual Environment
+Step 2: Create Virtual Environment
 
-```bash
 # Windows
 python -m venv venv
 venv\Scripts\activate
@@ -77,16 +70,13 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-### Step 3: Install Dependencies
+Step 3: Install Dependencies
 
-```bash
 pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-### Step 4: Create Folder Structure
+Step 4: Create Folder Structure
 
-```bash
 # Windows
 mkdir templates models visualizations data
 
@@ -94,33 +84,33 @@ mkdir templates models visualizations data
 mkdir -p templates models visualizations data
 ```
 
-### Step 5: Run the Complete Pipeline
+Step 5: Run the Complete Pipeline
 
-#### 5.1 Generate Dataset
-```bash
+5.1 Generate Dataset
+
 python 1_generate_data.py
-```
-**Output**: Creates `food_delivery_data.csv` (10,000 samples)
 
-#### 5.2 Perform EDA & Feature Engineering
-```bash
+Output: Creates `food_delivery_data.csv` (10,000 samples)
+
+5.2 Perform EDA & Feature Engineering
+
 python 2_eda_analysis.py
-```
-**Output**: 
+
+Output: 
 - Processed dataset: `food_delivery_processed.csv`
 - Visualizations in `visualizations/` folder
 
-#### 5.3 Train Models
-```bash
+5.3 Train Models
+
 python 3_train_model.py
-```
-**Output**: 
+
+Output: 
 - Best model and encoders in `models/` folder
 - Model comparison results
 - Feature importance plots
 
-#### 5.4 Launch Web Application
-```bash
+5.4 Launch Web Application
+
 python app.py
 ```
 **Output**: Web app running at `http://127.0.0.1:5000`
