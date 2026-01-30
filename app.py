@@ -8,28 +8,28 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-# Load model
+# --- LOAD MODELS ---
+print("Loading model and encoders...")
 try:
     model = joblib.load('models/best_model.pkl')
     label_encoders = joblib.load('models/label_encoders.pkl')
     feature_columns = joblib.load('models/feature_columns.pkl')
     model_info = joblib.load('models/model_info.pkl')
     print(f"✅ Model loaded: {model_info['best_model_name']}")
-except:
-    print("❌ Models not found. Using dummy mode.")
+except Exception as e:
+    print(f"❌ Error loading models: {e}")
+    # Fallback for testing without models
     model = None
+    model_info = {'best_model_name': 'Physics Mode (No Model)', 'test_mae': 0}
 
 # --- PHYSICS CONSTANTS ---
-# Max realistic speeds in km/h for different vehicles
 VEHICLE_MAX_SPEEDS = {
-    'bicycle': 18,          # ~3.3 mins per km
-    'electric_scooter': 30, # ~2.0 mins per km
-    'scooter': 45,          # ~1.3 mins per km
-    'motorcycle': 60,       # ~1.0 min per km
+    'bicycle': 18,          # ~18 km/h
+    'electric_scooter': 30, # ~30 km/h
+    'scooter': 45,          # ~45 km/h
+    'motorcycle': 60,       # ~60 km/h
 }
 
-# Traffic multipliers (Higher traffic = slower speed)
-# We divide max speed by this factor
 TRAFFIC_FACTORS = {
     'Low': 1.0,
     'Medium': 1.2,
@@ -37,38 +37,49 @@ TRAFFIC_FACTORS = {
     'Jam': 2.5
 }
 
-def calculate_minimum_travel_time(distance, vehicle, traffic):
+def calculate_minimum_travel_time(distance, vehicle, traffic, age, rating):
     """
-    Calculates the absolute minimum time required to travel the distance
-    based on physics limits of the vehicle and traffic conditions.
+    Calculates time based on Physics + Human Factors (Age/Rating)
     """
-    # Get base speed limit for vehicle (default to scooter if unknown)
+    # 1. Base Speed (km/h)
     base_speed_kmh = VEHICLE_MAX_SPEEDS.get(vehicle, 45)
     
-    # Apply traffic penalty
+    # 2. Traffic Factor (Slower in traffic)
     traffic_penalty = TRAFFIC_FACTORS.get(traffic, 1.2)
-    real_speed_kmh = base_speed_kmh / traffic_penalty
     
-    # Calculate time: Time = Distance / Speed
-    # Result in hours, convert to minutes
-    travel_time_hours = distance / real_speed_kmh
-    travel_time_minutes = travel_time_hours * 60
+    # 3. AGE FACTOR (Human Limit)
+    # Younger people (up to 40) ride at 100% potential
+    # People over 40 get 1% slower for every year
+    age_factor = 1.0
+    if age > 40:
+        years_over = age - 40
+        age_penalty = years_over * 0.01  # 1% per year
+        age_factor = 1.0 - min(0.5, age_penalty) # Cap penalty at 50%
+        
+    # 4. RATING FACTOR (Efficiency Limit)
+    # Ratings below 3.5 imply slower/less efficient service
+    rating_factor = 1.0
+    if rating < 3.5:
+        rating_factor = 0.9 # 10% slower if rating is bad
+        
+    # Calculate Real Speed
+    # Speed = Base * AgeFactor * RatingFactor / Traffic
+    real_speed_kmh = (base_speed_kmh * age_factor * rating_factor) / traffic_penalty
+    
+    # Calculate Time (Minutes)
+    if real_speed_kmh <= 0: real_speed_kmh = 1 # Prevent divide by zero
+    travel_time_minutes = (distance / real_speed_kmh) * 60
     
     return travel_time_minutes
 
 def prepare_input_features(input_data):
-    """Same feature preparation as before"""
+    """Prepare input data for the AI Model"""
     df = pd.DataFrame([input_data])
 
-    if all(k in input_data for k in ['restaurant_lat', 'restaurant_lon', 'delivery_lat', 'delivery_lon']):
-        df['Distance_km'] = np.sqrt(
-            (input_data['restaurant_lat'] - input_data['delivery_lat'])**2 +
-            (input_data['restaurant_lon'] - input_data['delivery_lon'])**2
-        ) * 111
-
+    # Time Features
     current_time = datetime.now()
     order_hour = int(input_data.get('order_hour', current_time.hour))
-
+    
     df['Order_hour'] = order_hour
     df['Day_of_week'] = current_time.weekday()
     df['Month'] = current_time.month
@@ -80,20 +91,21 @@ def prepare_input_features(input_data):
     elif 17 <= order_hour < 21: df['Time_period'] = 'Evening'
     else: df['Time_period'] = 'Night'
 
+    # Age/Rating Grouping
     age = int(input_data.get('delivery_person_age', 30))
     df['Age_group'] = 'Young' if age <= 25 else 'Middle' if age <= 35 else 'Senior'
 
     rating = float(input_data.get('delivery_person_ratings', 4.5))
     df['Rating_category'] = 'Average' if rating <= 4.0 else 'Good' if rating <= 4.5 else 'Excellent'
 
+    # Map to columns
     X = pd.DataFrame(columns=feature_columns)
-    
     feature_mapping = {
-        'Distance_km': df['Distance_km'].values[0] if 'Distance_km' in df else float(input_data.get('distance_km', 5)),
+        'Distance_km': float(input_data.get('distance_km', 5)),
         'Delivery_person_Age': age,
         'Delivery_person_Ratings': rating,
         'Preparation_time_min': int(input_data.get('preparation_time', 15)),
-        'Order_hour': df['Order_hour'].values[0],
+        'Order_hour': order_hour,
         'Day_of_week': df['Day_of_week'].values[0],
         'Month': df['Month'].values[0],
         'Is_weekend': df['Is_weekend'].values[0],
@@ -112,13 +124,13 @@ def prepare_input_features(input_data):
     for feature in feature_columns:
         X[feature] = [feature_mapping.get(feature, 0)]
 
+    # Label Encoding
     for col in X.select_dtypes(include=['object']).columns:
         if col in label_encoders:
             try:
                 X[col] = label_encoders[col].transform(X[col].astype(str))
             except:
                 X[col] = 0 
-
     return X
 
 @app.route('/')
@@ -135,29 +147,31 @@ def predict():
         distance = float(input_data.get('distance_km', 5.0))
         vehicle = input_data.get('vehicle', 'motorcycle')
         traffic = input_data.get('traffic', 'Low')
+        age = int(input_data.get('delivery_person_age', 30))
+        rating = float(input_data.get('delivery_person_ratings', 4.5))
         
-        # 2. Get Model Prediction (The AI Guess)
-        X = prepare_input_features(input_data)
-        ai_prediction = model.predict(X)[0]
+        # 2. Get AI Prediction
+        ai_prediction = 0
+        if model:
+            X = prepare_input_features(input_data)
+            ai_prediction = model.predict(X)[0]
         
-        # 3. Calculate Physics Constraints (The Reality Check)
-        min_travel_time = calculate_minimum_travel_time(distance, vehicle, traffic)
+        # 3. Calculate Physics Constraints (The Logic Check)
+        min_travel_time = calculate_minimum_travel_time(distance, vehicle, traffic, age, rating)
         
-        # Logic: Delivery cannot happen faster than Prep Time + Travel Time
-        # We add a 3-minute buffer for pickup/dropoff actions
-        pickup_buffer = 3 
+        # Delivery = Prep + Travel + Buffer (Pickup/Dropoff)
+        pickup_buffer = 4 # Minutes
         min_possible_total_time = prep_time + min_travel_time + pickup_buffer
         
         # 4. Final Decision
-        # If AI is too optimistic (faster than physics), use physics time
-        # If AI predicts longer (due to bad weather/rating), keep AI time
+        # Use the higher of the two (Physics limit vs AI prediction)
         final_prediction = max(ai_prediction, min_possible_total_time)
         
-        # Cap at reasonable max (e.g., 3 hours)
-        final_prediction = min(180, final_prediction)
-
+        # Hard caps for sanity
+        final_prediction = min(180, final_prediction) # Max 3 hours
+        
         # 5. Format Output
-        uncertainty = 4 # slightly wider range for realism
+        uncertainty = 4 
         predicted_time = float(round(final_prediction, 0))
         
         return jsonify({
@@ -165,12 +179,7 @@ def predict():
             'predicted_time': predicted_time,
             'predicted_time_min': float(round(predicted_time - uncertainty)),
             'predicted_time_max': float(round(predicted_time + uncertainty)),
-            'message': f'Estimated delivery time: {int(predicted_time)} minutes',
-            'debug_info': {
-                'ai_guess': round(ai_prediction, 1),
-                'physics_min': round(min_possible_total_time, 1),
-                'vehicle_speed_limit': VEHICLE_MAX_SPEEDS.get(vehicle, 45)
-            }
+            'message': f'Estimated delivery time: {int(predicted_time)} minutes'
         })
 
     except Exception as e:
