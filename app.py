@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-# --- LOAD MODELS ---
+# --- LOAD MODELS (SAFER VERSION) ---
 print("Loading model and encoders...")
 try:
     model = joblib.load('models/best_model.pkl')
@@ -18,8 +18,11 @@ try:
     print(f"✅ Model loaded: {model_info['best_model_name']}")
 except Exception as e:
     print(f"❌ Error loading models: {e}")
-    # Fallback for testing without models
+    print("⚠️ Running in Physics-Only Mode")
+    # Initialize variables to prevent "NameError" crashes
     model = None
+    label_encoders = {} 
+    feature_columns = []
     model_info = {'best_model_name': 'Physics Mode (No Model)', 'test_mae': 0}
 
 # --- PHYSICS CONSTANTS ---
