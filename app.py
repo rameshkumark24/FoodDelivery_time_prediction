@@ -8,32 +8,64 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-# Load model and encoders
-print("Loading model and encoders...")
+# Load model
 try:
     model = joblib.load('models/best_model.pkl')
     label_encoders = joblib.load('models/label_encoders.pkl')
     feature_columns = joblib.load('models/feature_columns.pkl')
     model_info = joblib.load('models/model_info.pkl')
     print(f"✅ Model loaded: {model_info['best_model_name']}")
-    print(f"✅ Test MAE: {model_info['test_mae']:.2f} minutes")
-except Exception as e:
-    print(f"❌ Error loading models: {e}")
-    # Fallback for testing without models
-    model_info = {'best_model_name': 'Not Loaded', 'test_mae': 0}
+except:
+    print("❌ Models not found. Using dummy mode.")
+    model = None
+
+# --- PHYSICS CONSTANTS ---
+# Max realistic speeds in km/h for different vehicles
+VEHICLE_MAX_SPEEDS = {
+    'bicycle': 18,          # ~3.3 mins per km
+    'electric_scooter': 30, # ~2.0 mins per km
+    'scooter': 45,          # ~1.3 mins per km
+    'motorcycle': 60,       # ~1.0 min per km
+}
+
+# Traffic multipliers (Higher traffic = slower speed)
+# We divide max speed by this factor
+TRAFFIC_FACTORS = {
+    'Low': 1.0,
+    'Medium': 1.2,
+    'High': 1.5,
+    'Jam': 2.5
+}
+
+def calculate_minimum_travel_time(distance, vehicle, traffic):
+    """
+    Calculates the absolute minimum time required to travel the distance
+    based on physics limits of the vehicle and traffic conditions.
+    """
+    # Get base speed limit for vehicle (default to scooter if unknown)
+    base_speed_kmh = VEHICLE_MAX_SPEEDS.get(vehicle, 45)
+    
+    # Apply traffic penalty
+    traffic_penalty = TRAFFIC_FACTORS.get(traffic, 1.2)
+    real_speed_kmh = base_speed_kmh / traffic_penalty
+    
+    # Calculate time: Time = Distance / Speed
+    # Result in hours, convert to minutes
+    travel_time_hours = distance / real_speed_kmh
+    travel_time_minutes = travel_time_hours * 60
+    
+    return travel_time_minutes
 
 def prepare_input_features(input_data):
-    """Prepare input data for prediction"""
+    """Same feature preparation as before"""
     df = pd.DataFrame([input_data])
 
-    # 1. Calculate Distance if coordinates provided
     if all(k in input_data for k in ['restaurant_lat', 'restaurant_lon', 'delivery_lat', 'delivery_lon']):
         df['Distance_km'] = np.sqrt(
             (input_data['restaurant_lat'] - input_data['delivery_lat'])**2 +
             (input_data['restaurant_lon'] - input_data['delivery_lon'])**2
         ) * 111
 
-    # 2. Time Features
     current_time = datetime.now()
     order_hour = int(input_data.get('order_hour', current_time.hour))
 
@@ -48,14 +80,12 @@ def prepare_input_features(input_data):
     elif 17 <= order_hour < 21: df['Time_period'] = 'Evening'
     else: df['Time_period'] = 'Night'
 
-    # 3. Age & Rating Features
     age = int(input_data.get('delivery_person_age', 30))
     df['Age_group'] = 'Young' if age <= 25 else 'Middle' if age <= 35 else 'Senior'
 
     rating = float(input_data.get('delivery_person_ratings', 4.5))
     df['Rating_category'] = 'Average' if rating <= 4.0 else 'Good' if rating <= 4.5 else 'Excellent'
 
-    # 4. Map inputs to Feature Columns (Ensure exact match with training)
     X = pd.DataFrame(columns=feature_columns)
     
     feature_mapping = {
@@ -82,13 +112,11 @@ def prepare_input_features(input_data):
     for feature in feature_columns:
         X[feature] = [feature_mapping.get(feature, 0)]
 
-    # 5. Label Encoding
     for col in X.select_dtypes(include=['object']).columns:
         if col in label_encoders:
             try:
                 X[col] = label_encoders[col].transform(X[col].astype(str))
             except:
-                # Handle unseen categories
                 X[col] = 0 
 
     return X
@@ -102,37 +130,56 @@ def predict():
     try:
         input_data = request.get_json()
         
-        # Extract Prep Time for logic check
+        # 1. Get Core Inputs
         prep_time = int(input_data.get('preparation_time', 15))
+        distance = float(input_data.get('distance_km', 5.0))
+        vehicle = input_data.get('vehicle', 'motorcycle')
+        traffic = input_data.get('traffic', 'Low')
         
+        # 2. Get Model Prediction (The AI Guess)
         X = prepare_input_features(input_data)
-        prediction = model.predict(X)[0]
+        ai_prediction = model.predict(X)[0]
         
-        # LOGIC FIX: Delivery cannot happen before preparation + transit
-        # We assume at least 5 mins of travel time
-        min_logical_time = prep_time + 5
+        # 3. Calculate Physics Constraints (The Reality Check)
+        min_travel_time = calculate_minimum_travel_time(distance, vehicle, traffic)
         
-        prediction = max(min_logical_time, prediction)
-        prediction = min(120, prediction) # Cap at 2 hours to avoid outliers
+        # Logic: Delivery cannot happen faster than Prep Time + Travel Time
+        # We add a 3-minute buffer for pickup/dropoff actions
+        pickup_buffer = 3 
+        min_possible_total_time = prep_time + min_travel_time + pickup_buffer
+        
+        # 4. Final Decision
+        # If AI is too optimistic (faster than physics), use physics time
+        # If AI predicts longer (due to bad weather/rating), keep AI time
+        final_prediction = max(ai_prediction, min_possible_total_time)
+        
+        # Cap at reasonable max (e.g., 3 hours)
+        final_prediction = min(180, final_prediction)
 
-        uncertainty = 3 # +/- minutes range
-        predicted_time = float(round(prediction, 1))
+        # 5. Format Output
+        uncertainty = 4 # slightly wider range for realism
+        predicted_time = float(round(final_prediction, 0))
         
         return jsonify({
             'success': True,
             'predicted_time': predicted_time,
-            'predicted_time_min': float(round(prediction - uncertainty, 1)),
-            'predicted_time_max': float(round(prediction + uncertainty, 1)),
-            'message': f'Estimated delivery time: {int(predicted_time)} minutes'
+            'predicted_time_min': float(round(predicted_time - uncertainty)),
+            'predicted_time_max': float(round(predicted_time + uncertainty)),
+            'message': f'Estimated delivery time: {int(predicted_time)} minutes',
+            'debug_info': {
+                'ai_guess': round(ai_prediction, 1),
+                'physics_min': round(min_possible_total_time, 1),
+                'vehicle_speed_limit': VEHICLE_MAX_SPEEDS.get(vehicle, 45)
+            }
         })
 
     except Exception as e:
-        print(f"Prediction Error: {e}")
+        print(f"Error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'healthy', 'model': model_info['best_model_name']})
+    return jsonify({'status': 'healthy'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
