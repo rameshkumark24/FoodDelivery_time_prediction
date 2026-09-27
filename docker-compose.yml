@@ -1,0 +1,15 @@
+# docker compose up -d --build   # build and start on http://localhost:5000
+# docker compose logs -f          # follow logs
+# docker compose down             # stop
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: "5000"
+      WEB_CONCURRENCY: "2"
+    volumes:
+      # Serve a freshly retrained model without rebuilding the image.
+      - ./models:/app/models:ro
+    restart: unless-stopped

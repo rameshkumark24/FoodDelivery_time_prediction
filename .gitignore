@@ -37,12 +37,8 @@ ENV/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Model files (optional - remove if you want to track models)
-# models/*.pkl
-# models/*.joblib
-
-# Data files (optional - keep if dataset is small)
-# *.csv
+# Derived data (regenerate with 2_eda_analysis.py)
+data/food_delivery_processed.csv
 
 # Logs
 *.log
@@ -55,9 +51,6 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
-
-# Docker
-.dockerignore
 
 # OS
 Thumbs.db

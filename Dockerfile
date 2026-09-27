@@ -1,37 +1,35 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install system dependencies needed for scientific libs and curl
-RUN apt-get update && apt-get install -y gcc curl && rm -rf /var/lib/apt/lists/*
+# libgomp1 is the OpenMP runtime that LightGBM and scikit-learn load.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip/setuptools/wheel for reliable builds
-RUN pip install --upgrade pip setuptools wheel
-
-# Copy requirements file and install dependencies without cache
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
-# Print numpy and pandas versions for build verification
-RUN python -c "import numpy; print('Docker numpy version:', numpy.__version__)"
-RUN python -c "import pandas; print('Docker pandas version:', pandas.__version__)"
+# Only what the web app needs at runtime (no datasets, plots or training code).
+COPY delivery/ delivery/
+COPY templates/ templates/
+COPY models/delivery_model.joblib models/
+COPY app.py gunicorn.conf.py ./
 
-# Copy app source code
-COPY . .
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
 
-# Create needed directories if missing
-RUN mkdir -p models templates visualizations
-
-# Expose container port 5000 (used by Flask/Gunicorn)
+# Hosting platforms (Render, Railway, Heroku...) override PORT at runtime.
+ENV PORT=5000
 EXPOSE 5000
 
-# Set environment variables for Flask and Python buffering
-ENV FLASK_APP=app.py
-ENV PYTHONUNBUFFERED=1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '5000'), timeout=4)"
 
-# Health check endpoint to confirm app readiness
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
-
-# Start Gunicorn, listening on all interfaces and the port Render specifies
-CMD ["sh", "-c", "gunicorn -w 4 -b 0.0.0.0:$PORT --timeout 120 app:app"]
+# Workers, bind address and timeouts come from gunicorn.conf.py.
+CMD ["gunicorn", "app:app"]

@@ -1,0 +1,5 @@
+# Everything needed to regenerate data, retrain, plot and run the tests.
+-r requirements.txt
+matplotlib==3.10.7
+seaborn==0.13.2
+pytest==8.4.2
