@@ -3,247 +3,439 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GourmetExpress | AI Predictor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>GourmetExpress | AI Delivery Time Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #ff4757;
-            --secondary: #2f3542;
+            --primary-hover: #ff6b81;
+            --kitchen: #ffa502;
+            --text: #2f3542;
+            --muted: #57606f;
             --bg: #f1f2f6;
-            --glass: rgba(255, 255, 255, 0.92);
+            --card: rgba(255, 255, 255, 0.94);
+            --card-border: rgba(255, 255, 255, 0.8);
+            --input-bg: #ffffff;
+            --input-border: #e0e6ed;
+            --subtle: rgba(0, 0, 0, 0.04);
+            --error: #d63031;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text: #f1f2f6;
+                --muted: #a4b0be;
+                --bg: #1e2127;
+                --card: rgba(47, 53, 66, 0.94);
+                --card-border: rgba(255, 255, 255, 0.06);
+                --input-bg: #262a33;
+                --input-border: #3d4452;
+                --subtle: rgba(255, 255, 255, 0.05);
+                --error: #ff7675;
+            }
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
 
         body {
             background-color: var(--bg);
             background-image: radial-gradient(#ff475711 1px, transparent 0);
             background-size: 30px 30px;
-            color: var(--secondary);
+            color: var(--text);
             min-height: 100vh;
         }
 
         .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
 
-        .header { text-align: center; margin-bottom: 40px; }
-        .header h1 { font-size: 2.8em; color: var(--secondary); font-weight: 700; }
-        .header span { color: var(--primary); }
+        a { color: var(--primary); }
 
-        .main-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px; }
+        .header { text-align: center; margin-bottom: 32px; }
+        .header h1 { font-size: 2.8em; font-weight: 800; }
+        .header h1 span { color: var(--primary); }
+        .header p { color: var(--muted); margin-top: 6px; }
+
+        .banner { padding: 14px 18px; border-radius: 12px; margin-bottom: 24px; font-weight: 600;
+                  background: rgba(214, 48, 49, 0.12); color: var(--error); text-align: center; }
+
+        .main-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px; align-items: start; }
 
         .card {
-            background: var(--glass); backdrop-filter: blur(10px); border-radius: 24px;
-            padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid rgba(255,255,255,0.8);
+            background: var(--card); backdrop-filter: blur(10px); border-radius: 24px;
+            padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); border: 1px solid var(--card-border);
         }
 
-        h2 { margin-bottom: 20px; font-size: 1.4em; border-left: 4px solid var(--primary); padding-left: 15px; }
+        h2 { margin-bottom: 20px; font-size: 1.35em; border-left: 4px solid var(--primary); padding-left: 15px; }
 
-        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        fieldset { border: none; margin-bottom: 8px; }
+        legend { font-size: 0.75em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+                 color: var(--primary); margin-bottom: 10px; }
 
-        label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.85em; color: #57606f; }
-        
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 14px; }
+
+        label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.85em; color: var(--muted); }
+
         input, select {
-            width: 100%; padding: 12px; border-radius: 10px; border: 2px solid #e0e6ed;
-            background: white; transition: 0.2s; font-size: 0.95em;
+            width: 100%; padding: 12px; border-radius: 10px; border: 2px solid var(--input-border);
+            background: var(--input-bg); color: var(--text); transition: border-color 0.2s; font-size: 0.95em;
         }
         input:focus, select:focus { border-color: var(--primary); outline: none; }
+        input.invalid, select.invalid { border-color: var(--error); }
+        .field-error { display: block; min-height: 1em; margin-top: 4px; font-size: 0.78em; color: var(--error); }
 
         button {
             width: 100%; padding: 16px; background: var(--primary); color: white; border: none;
             border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.3s;
-            text-transform: uppercase; letter-spacing: 1px; margin-top: 10px;
-            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.2);
+            text-transform: uppercase; letter-spacing: 1px; margin-top: 6px;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.25);
         }
-        button:hover { background: #ff6b81; transform: translateY(-2px); }
+        button:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-2px); }
+        button:disabled { opacity: 0.6; cursor: wait; }
 
-        .result-section { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 400px; }
-        .prediction-box { display: none; width: 100%; }
-        .prediction-box.active { display: block; animation: fadeIn 0.5s ease; }
+        .result-section { display: flex; flex-direction: column; justify-content: center; align-items: center;
+                          text-align: center; min-height: 420px; position: sticky; top: 20px; }
+        .result-section > div { width: 100%; }
+        [hidden] { display: none !important; }
 
-        .time-display { 
-            font-size: 5em; font-weight: 800; color: var(--primary); 
-            line-height: 1; margin: 15px 0; 
-            text-shadow: 2px 2px 0px rgba(0,0,0,0.05);
-        }
-        
-        .loading { display: none; flex-direction: column; align-items: center; }
+        .placeholder-icon { font-size: 60px; opacity: 0.25; margin-bottom: 20px; }
+        .muted { color: var(--muted); }
+
+        .time-display { font-size: 5.5em; font-weight: 800; color: var(--primary); line-height: 1; margin: 12px 0 4px; }
+        .eta { margin-top: 10px; font-size: 1.05em; }
+        .pill { display: inline-block; margin-top: 18px; padding: 10px 16px; border-radius: 999px;
+                background: var(--subtle); font-weight: 600; }
+
+        .breakdown { margin-top: 26px; text-align: left; }
+        .bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--subtle); }
+        .bar .kitchen { background: var(--kitchen); }
+        .bar .road { background: var(--primary); }
+        .legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px;
+                  margin-top: 8px; font-size: 0.85em; color: var(--muted); }
+        .legend > span { white-space: nowrap; }
+        .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+
+        .error-box { color: var(--error); font-weight: 600; }
+
+        .loading { display: flex; flex-direction: column; align-items: center; }
         .spinner {
-            width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary);
+            width: 40px; height: 40px; border: 4px solid var(--subtle); border-top: 4px solid var(--primary);
             border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px;
         }
+        .fade-in { animation: fadeIn 0.4s ease; }
 
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .stats { margin-top: 30px; }
+        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .stat { background: var(--subtle); border-radius: 16px; padding: 18px; }
+        .stat .value { font-size: 1.8em; font-weight: 800; }
+        .stat .label { font-size: 0.8em; color: var(--muted); margin-top: 4px; }
+        .stats .footnote { margin-top: 16px; font-size: 0.82em; color: var(--muted); }
 
-        @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .result-section { position: static; min-height: 300px; }
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 480px) {
+            .row { grid-template-columns: 1fr; }
+            .header h1 { font-size: 2.2em; }
+            .card { padding: 22px; }
+            .stat .value { font-size: 1.4em; }
+        }
     </style>
 </head>
 <body>
+{% macro number_field(name, value=none) -%}
+    {%- set spec = form.numeric[name] -%}
+    <div>
+        <label for="{{ name }}">{{ spec.label }}</label>
+        <input type="number" id="{{ name }}" name="{{ name }}" data-numeric
+               min="{{ spec.min }}" max="{{ spec.max }}" step="{{ spec.step }}"
+               value="{{ value if value is not none else spec.default }}" required>
+        <small class="field-error" id="{{ name }}-error"></small>
+    </div>
+{%- endmacro %}
+{% macro select_field(name, label) -%}
+    {%- set field = form.categorical[name] -%}
+    <div>
+        <label for="{{ name }}">{{ label }}</label>
+        <select id="{{ name }}" name="{{ name }}">
+            {%- for value, text in field.choices %}
+            <option value="{{ value }}"{{ ' selected' if value == field.default }}>{{ text }}</option>
+            {%- endfor %}
+        </select>
+        <small class="field-error" id="{{ name }}-error"></small>
+    </div>
+{%- endmacro %}
     <div class="container">
-        <div class="header">
+        <header class="header">
             <h1>Gourmet<span>Express</span></h1>
-            <p>AI Delivery Time Predictor • Model: {{ model_info.best_model_name }}</p>
+            <p>
+                AI Delivery Time Predictor
+                {%- if model_info %} • Model: {{ model_info.model_name }}
+                • typical error ±{{ '%.1f'|format(model_info.test_metrics.mae) }} min{% endif %}
+            </p>
+        </header>
+
+        {% if not model_info %}
+        <div class="banner" role="alert">
+            The prediction model is not loaded. Run <code>python 3_train_model.py</code> and restart the app.
         </div>
+        {% endif %}
 
-        <div class="main-grid">
-            <div class="card">
-                <h2>Delivery Details</h2>
-                <form id="deliveryForm">
-                    <div class="row">
-                        <div>
-                            <label>Distance (km)</label>
-                            <input type="number" id="distance" value="5.0" step="0.1" min="0.1" required>
+        <main class="main-grid">
+            <section class="card" aria-labelledby="details-title">
+                <h2 id="details-title">Delivery details</h2>
+                <form id="deliveryForm" novalidate>
+                    <fieldset>
+                        <legend>Order</legend>
+                        <div class="row">
+                            {{ number_field('distance_km', 5.0) }}
+                            {{ number_field('preparation_time') }}
                         </div>
-                        <div>
-                            <label>City Type</label>
-                            <select id="city">
-                                <option value="Urban" selected>Urban 🏙️</option>
-                                <option value="Semi-Urban">Semi-Urban 🏡</option>
-                                <option value="Metropolitan">Metropolitan 🌆</option>
-                            </select>
+                        <div class="row">
+                            {{ select_field('order_type', 'Order type') }}
+                            {{ select_field('festival', 'Festival day?') }}
                         </div>
-                    </div>
+                    </fieldset>
 
-                    <div class="row">
-                        <div>
-                            <label>Weather</label>
-                            <select id="weather">
-                                <option value="Sunny">Sunny ☀️</option>
-                                <option value="Cloudy">Cloudy ☁️</option>
-                                <option value="Rainy">Rainy 🌧️</option>
-                                <option value="Fog">Fog 🌫️</option>
-                                <option value="Stormy">Stormy ⛈️</option>
-                            </select>
+                    <fieldset>
+                        <legend>Conditions</legend>
+                        <div class="row">
+                            {{ select_field('weather', 'Weather') }}
+                            {{ select_field('traffic', 'Traffic') }}
                         </div>
-                        <div>
-                            <label>Traffic</label>
-                            <select id="traffic">
-                                <option value="Low">Low 🟢</option>
-                                <option value="Medium" selected>Medium 🟡</option>
-                                <option value="High">High 🟠</option>
-                                <option value="Jam">Jam 🔴</option>
-                            </select>
+                        <div class="row">
+                            {{ select_field('city', 'City type') }}
+                            <div></div>
                         </div>
-                    </div>
+                    </fieldset>
 
-                    <div class="row">
-                        <div>
-                            <label>Prep Time (min)</label>
-                            <input type="number" id="prep_time" value="15" min="5" required>
+                    <fieldset>
+                        <legend>Timing</legend>
+                        <div class="row">
+                            <div>
+                                <label for="order_hour">Order time</label>
+                                <select id="order_hour" name="order_hour" data-numeric>
+                                    {%- for hour in range(24) %}
+                                    <option value="{{ hour }}">{{ '%02d:00 – %02d:59'|format(hour, hour) }}</option>
+                                    {%- endfor %}
+                                </select>
+                                <small class="field-error" id="order_hour-error"></small>
+                            </div>
+                            <div>
+                                <label for="day_of_week">Day</label>
+                                <select id="day_of_week" name="day_of_week" data-numeric>
+                                    {%- for index, day in form.days %}
+                                    <option value="{{ index }}">{{ day }}</option>
+                                    {%- endfor %}
+                                </select>
+                                <small class="field-error" id="day_of_week-error"></small>
+                            </div>
                         </div>
-                        <div>
-                            <label>Order Type</label>
-                            <select id="order_type">
-                                <option value="Meal" selected>Meal 🍔</option>
-                                <option value="Snack">Snack 🥨</option>
-                                <option value="Drinks">Drinks 🥤</option>
-                                <option value="Buffet">Buffet 🍱</option>
-                            </select>
-                        </div>
-                    </div>
+                    </fieldset>
 
-                    <div class="row">
-                        <div>
-                            <label>Vehicle</label>
-                            <select id="vehicle">
-                                <option value="motorcycle">Motorcycle 🏍️</option>
-                                <option value="scooter">Scooter 🛵</option>
-                                <option value="electric_scooter">Electric ⚡</option>
-                                <option value="bicycle">Bicycle 🚲</option>
-                            </select>
+                    <fieldset>
+                        <legend>Rider</legend>
+                        <div class="row">
+                            {{ select_field('vehicle', 'Vehicle') }}
+                            {{ number_field('delivery_person_age', 28) }}
                         </div>
-                        <div>
-                            <label>Festival Day?</label>
-                            <select id="festival">
-                                <option value="No" selected>No</option>
-                                <option value="Yes">Yes 🎉</option>
-                            </select>
+                        <div class="row">
+                            {{ number_field('delivery_person_ratings') }}
+                            <div></div>
                         </div>
-                    </div>
+                    </fieldset>
 
-                    <div class="row">
-                        <div>
-                            <label>Rider Age</label>
-                            <input type="number" id="age" value="28" min="18" max="60">
-                        </div>
-                        <div>
-                            <label>Rider Rating (1-5)</label>
-                            <input type="number" id="rating" value="4.5" step="0.1" min="1" max="5">
-                        </div>
-                    </div>
-
-                    <button type="submit">Predict Estimate</button>
+                    <button type="submit" id="submitBtn"{{ ' disabled' if not model_info }}>Predict delivery time</button>
                 </form>
-            </div>
+            </section>
 
-            <div class="card result-section">
+            <section class="card result-section" aria-live="polite">
                 <div id="placeholder">
-                    <div style="font-size: 60px; opacity: 0.2; margin-bottom: 20px;">🛵</div>
-                    <p style="opacity: 0.6;">Enter details to calculate</p>
+                    <div class="placeholder-icon">🛵</div>
+                    <p class="muted">Enter the delivery details to get an estimate</p>
                 </div>
 
-                <div class="loading" id="loader">
+                <div class="loading" id="loader" hidden>
                     <div class="spinner"></div>
-                    <p>Analyzing route & conditions...</p>
+                    <p>Analyzing route &amp; conditions...</p>
                 </div>
 
-                <div class="prediction-box" id="resultBox">
-                    <h3 style="color: #777;">Estimated Arrival</h3>
+                <div class="error-box" id="errorBox" hidden>
+                    <div class="placeholder-icon">⚠️</div>
+                    <p id="errorMessage"></p>
+                </div>
+
+                <div id="resultBox" hidden>
+                    <h3 class="muted">Estimated delivery time</h3>
                     <div class="time-display" id="timeResult">--</div>
-                    <p style="font-size: 1.1em; color: var(--secondary);">minutes</p>
-                    <div style="margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.03); border-radius: 12px;">
-                        <p id="rangeResult" style="font-weight: 600;">--</p>
+                    <p>minutes</p>
+                    <p class="eta" id="etaResult"></p>
+                    <div class="pill" id="rangeResult"></div>
+
+                    <div class="breakdown">
+                        <div class="bar" role="img" id="breakdownBar">
+                            <div class="kitchen" id="kitchenBar"></div>
+                            <div class="road" id="roadBar"></div>
+                        </div>
+                        <div class="legend">
+                            <span><span class="dot" style="background: var(--kitchen)"></span>Kitchen <b id="kitchenMin"></b></span>
+                            <span><span class="dot" style="background: var(--primary)"></span>Road &amp; handover <b id="roadMin"></b></span>
+                        </div>
                     </div>
                 </div>
+            </section>
+        </main>
+
+        {% if model_info %}
+        <section class="card stats" aria-labelledby="stats-title">
+            <h2 id="stats-title">Model performance</h2>
+            <div class="stat-grid">
+                <div class="stat">
+                    <div class="value">±{{ '%.1f'|format(model_info.test_metrics.mae) }}<small> min</small></div>
+                    <div class="label">Mean absolute error</div>
+                </div>
+                <div class="stat">
+                    <div class="value">{{ '%.0f'|format(model_info.test_metrics.within_5_min_pct) }}%</div>
+                    <div class="label">Predictions within ±5 min</div>
+                </div>
+                <div class="stat">
+                    <div class="value">{{ '%.3f'|format(model_info.test_metrics.r2) }}</div>
+                    <div class="label">R² score</div>
+                </div>
+                <div class="stat">
+                    <div class="value">{{ '%.0f'|format(model_info.prediction_interval.test_coverage_pct) }}%</div>
+                    <div class="label">Actual times inside the {{ '%.0f'|format(model_info.prediction_interval.confidence * 100) }}% range</div>
+                </div>
             </div>
-        </div>
+            <p class="footnote">
+                {{ model_info.model_name }} was selected from {{ model_info.model_comparison|length }} candidates by
+                {{ model_info.cross_validation.folds }}-fold cross-validation and evaluated on
+                {{ '{:,}'.format(model_info.test_samples) }} held-out orders.
+                Trained {{ model_info.trained_at[:10] }}. Full details: <a href="/api/model-info">/api/model-info</a>.
+            </p>
+        </section>
+        {% endif %}
     </div>
 
     <script>
-        document.getElementById('deliveryForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // UI State
-            document.getElementById('placeholder').style.display = 'none';
-            document.getElementById('resultBox').classList.remove('active');
-            document.getElementById('loader').style.display = 'flex';
+        const form = document.getElementById('deliveryForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const $ = (id) => document.getElementById(id);
+        const panels = ['placeholder', 'loader', 'errorBox', 'resultBox'];
 
-            // Construct full payload including all keys
-            const payload = {
-                distance_km: parseFloat(document.getElementById('distance').value),
-                city: document.getElementById('city').value,
-                weather: document.getElementById('weather').value,
-                traffic: document.getElementById('traffic').value,
-                preparation_time: parseInt(document.getElementById('prep_time').value),
-                order_type: document.getElementById('order_type').value,
-                vehicle: document.getElementById('vehicle').value,
-                festival: document.getElementById('festival').value,
-                delivery_person_age: parseInt(document.getElementById('age').value),
-                delivery_person_ratings: parseFloat(document.getElementById('rating').value),
-                order_hour: new Date().getHours() // Auto-detect current hour
-            };
+        function show(panel) {
+            panels.forEach((id) => { $(id).hidden = id !== panel; });
+            $(panel).classList.remove('fade-in');
+            void $(panel).offsetWidth;  // restart the animation
+            $(panel).classList.add('fade-in');
+        }
+
+        function clearFieldErrors() {
+            form.querySelectorAll('.invalid').forEach((el) => el.classList.remove('invalid'));
+            form.querySelectorAll('.field-error').forEach((el) => { el.textContent = ''; });
+        }
+
+        function showFieldErrors(errors) {
+            Object.entries(errors || {}).forEach(([field, message]) => {
+                const input = form.elements[field];
+                const slot = $(`${field}-error`);
+                if (input) input.classList.add('invalid');
+                if (slot) slot.textContent = message;
+            });
+        }
+
+        function showError(message) {
+            $('errorMessage').textContent = message;
+            show('errorBox');
+            revealResultOnSmallScreens();
+        }
+
+        function formatClock(date) {
+            return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+
+        function renderResult(data, payload) {
+            $('timeResult').textContent = data.predicted_time;
+            const confidence = Math.round(data.interval_confidence * 100);
+            $('rangeResult').textContent =
+                `${confidence}% likely between ${data.predicted_time_min}–${data.predicted_time_max} min`;
+
+            // The ETA is anchored to now only when the order is for the current hour.
+            const now = new Date();
+            const today = (now.getDay() + 6) % 7;  // JS weeks start on Sunday; the API's on Monday
+            let placedAt = now;
+            let prefix = 'Arrives around';
+            if (payload.order_hour !== now.getHours() || payload.day_of_week !== today) {
+                placedAt = new Date(now);
+                placedAt.setHours(payload.order_hour, 0, 0, 0);
+                prefix = `Ordered at ${formatClock(placedAt)} → arrives around`;
+            }
+            const eta = new Date(placedAt.getTime() + data.predicted_time * 60000);
+            $('etaResult').textContent = `${prefix} ${formatClock(eta)}`;
+
+            const kitchen = data.breakdown.preparation_min;
+            const road = data.breakdown.travel_and_handover_min;
+            const total = Math.max(kitchen + road, 1);
+            $('kitchenBar').style.width = `${(kitchen / total) * 100}%`;
+            $('roadBar').style.width = `${(road / total) * 100}%`;
+            $('kitchenMin').textContent = `${Math.round(kitchen)} min`;
+            $('roadMin').textContent = `${Math.round(road)} min`;
+            $('breakdownBar').setAttribute('aria-label',
+                `Kitchen ${Math.round(kitchen)} minutes, road and handover ${Math.round(road)} minutes`);
+            show('resultBox');
+            revealResultOnSmallScreens();
+        }
+
+        // On narrow screens the result card sits below the form.
+        function revealResultOnSmallScreens() {
+            if (window.matchMedia('(max-width: 900px)').matches) {
+                $('resultBox').closest('section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function collectPayload() {
+            const payload = {};
+            for (const el of form.elements) {
+                if (!el.name) continue;
+                payload[el.name] = el.hasAttribute('data-numeric')
+                    ? (el.value === '' ? null : Number(el.value))
+                    : el.value;
+            }
+            return payload;
+        }
+
+        // Default the timing inputs to the visitor's local time.
+        const now = new Date();
+        $('order_hour').value = now.getHours();
+        $('day_of_week').value = (now.getDay() + 6) % 7;
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            clearFieldErrors();
+            const payload = collectPayload();
+            show('loader');
+            submitBtn.disabled = true;
 
             try {
                 const res = await fetch('/predict', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload),
                 });
-                
                 const data = await res.json();
-                document.getElementById('loader').style.display = 'none';
-
-                if(data.success) {
-                    document.getElementById('timeResult').innerText = Math.round(data.predicted_time);
-                    document.getElementById('rangeResult').innerText = 
-                        `Range: ${Math.round(data.predicted_time_min)} - ${Math.round(data.predicted_time_max)} min`;
-                    document.getElementById('resultBox').classList.add('active');
+                if (data.success) {
+                    renderResult(data, payload);
                 } else {
-                    alert('Error: ' + data.error);
+                    showFieldErrors(data.errors);
+                    showError(data.errors ? 'Please fix the highlighted fields.' : (data.error || 'Prediction failed.'));
                 }
             } catch (err) {
-                document.getElementById('loader').style.display = 'none';
-                alert("Connection error. Please try again.");
+                showError('Connection error. Please try again.');
+            } finally {
+                submitBtn.disabled = false;
             }
         });
     </script>

@@ -1,197 +1,138 @@
-from flask import Flask, render_template, request, jsonify
-import joblib
-import numpy as np
-import pandas as pd
-from datetime import datetime
-import warnings
-warnings.filterwarnings('ignore')
+"""Flask web app and JSON API for food delivery time predictions."""
+import os
 
-app = Flask(__name__)
+# LightGBM and scikit-learn use OpenMP, whose thread pool does not survive
+# fork(): under ``gunicorn --preload`` a worker would deadlock on its first
+# prediction. Single-row predictions gain nothing from threads anyway. This
+# must run before any OpenMP-backed library is imported.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
 
-# --- LOAD MODELS (SAFER VERSION) ---
-print("Loading model and encoders...")
-try:
-    model = joblib.load('models/best_model.pkl')
-    label_encoders = joblib.load('models/label_encoders.pkl')
-    feature_columns = joblib.load('models/feature_columns.pkl')
-    model_info = joblib.load('models/model_info.pkl')
-    print(f"✅ Model loaded: {model_info['best_model_name']}")
-except Exception as e:
-    print(f"❌ Error loading models: {e}")
-    print("⚠️ Running in Physics-Only Mode")
-    # Initialize variables to prevent "NameError" crashes
-    model = None
-    label_encoders = {} 
-    feature_columns = []
-    model_info = {'best_model_name': 'Physics Mode (No Model)', 'test_mae': 0}
+import logging  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Optional, Union  # noqa: E402
 
-# --- PHYSICS CONSTANTS ---
-VEHICLE_MAX_SPEEDS = {
-    'bicycle': 18,          # ~18 km/h
-    'electric_scooter': 30, # ~30 km/h
-    'scooter': 45,          # ~45 km/h
-    'motorcycle': 60,       # ~60 km/h
-}
+from flask import Flask, jsonify, render_template, request  # noqa: E402
+from werkzeug.exceptions import HTTPException  # noqa: E402
 
-TRAFFIC_FACTORS = {
-    'Low': 1.0,
-    'Medium': 1.2,
-    'High': 1.5,
-    'Jam': 2.5
-}
+from delivery.config import (  # noqa: E402
+    CATEGORICAL_INPUTS,
+    DAY_NAMES,
+    DISPLAY_LABELS,
+    MODEL_PATH,
+    NUMERIC_INPUTS,
+)
+from delivery.predictor import DeliveryTimePredictor  # noqa: E402
+from delivery.validation import ValidationError, validate_order  # noqa: E402
 
-def calculate_minimum_travel_time(distance, vehicle, traffic, age, rating):
-    """
-    Calculates time based on Physics + Human Factors (Age/Rating)
-    """
-    # 1. Base Speed (km/h)
-    base_speed_kmh = VEHICLE_MAX_SPEEDS.get(vehicle, 45)
-    
-    # 2. Traffic Factor (Slower in traffic)
-    traffic_penalty = TRAFFIC_FACTORS.get(traffic, 1.2)
-    
-    # 3. AGE FACTOR (Human Limit)
-    # Younger people (up to 40) ride at 100% potential
-    # People over 40 get 1% slower for every year
-    age_factor = 1.0
-    if age > 40:
-        years_over = age - 40
-        age_penalty = years_over * 0.01  # 1% per year
-        age_factor = 1.0 - min(0.5, age_penalty) # Cap penalty at 50%
-        
-    # 4. RATING FACTOR (Efficiency Limit)
-    # Ratings below 3.5 imply slower/less efficient service
-    rating_factor = 1.0
-    if rating < 3.5:
-        rating_factor = 0.9 # 10% slower if rating is bad
-        
-    # Calculate Real Speed
-    # Speed = Base * AgeFactor * RatingFactor / Traffic
-    real_speed_kmh = (base_speed_kmh * age_factor * rating_factor) / traffic_penalty
-    
-    # Calculate Time (Minutes)
-    if real_speed_kmh <= 0: real_speed_kmh = 1 # Prevent divide by zero
-    travel_time_minutes = (distance / real_speed_kmh) * 60
-    
-    return travel_time_minutes
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("delivery.app")
 
-def prepare_input_features(input_data):
-    """Prepare input data for the AI Model"""
-    df = pd.DataFrame([input_data])
 
-    # Time Features
-    current_time = datetime.now()
-    order_hour = int(input_data.get('order_hour', current_time.hour))
-    
-    df['Order_hour'] = order_hour
-    df['Day_of_week'] = current_time.weekday()
-    df['Month'] = current_time.month
-    df['Is_weekend'] = 1 if current_time.weekday() >= 5 else 0
-    df['Is_peak_hour'] = 1 if (12 <= order_hour <= 14) or (19 <= order_hour <= 21) else 0
+def load_predictor(path: Union[str, Path]) -> Optional[DeliveryTimePredictor]:
+    try:
+        predictor = DeliveryTimePredictor.load(path)
+    except FileNotFoundError:
+        logger.error("Model file %s not found - run 3_train_model.py first", path)
+        return None
+    except Exception:
+        logger.exception("Could not load model from %s - run 3_train_model.py first", path)
+        return None
+    logger.info("Loaded model %s from %s", predictor.model_name, path)
+    return predictor
 
-    if 6 <= order_hour < 12: df['Time_period'] = 'Morning'
-    elif 12 <= order_hour < 17: df['Time_period'] = 'Afternoon'
-    elif 17 <= order_hour < 21: df['Time_period'] = 'Evening'
-    else: df['Time_period'] = 'Night'
 
-    # Age/Rating Grouping
-    age = int(input_data.get('delivery_person_age', 30))
-    df['Age_group'] = 'Young' if age <= 25 else 'Middle' if age <= 35 else 'Senior'
-
-    rating = float(input_data.get('delivery_person_ratings', 4.5))
-    df['Rating_category'] = 'Average' if rating <= 4.0 else 'Good' if rating <= 4.5 else 'Excellent'
-
-    # Map to columns
-    X = pd.DataFrame(columns=feature_columns)
-    feature_mapping = {
-        'Distance_km': float(input_data.get('distance_km', 5)),
-        'Delivery_person_Age': age,
-        'Delivery_person_Ratings': rating,
-        'Preparation_time_min': int(input_data.get('preparation_time', 15)),
-        'Order_hour': order_hour,
-        'Day_of_week': df['Day_of_week'].values[0],
-        'Month': df['Month'].values[0],
-        'Is_weekend': df['Is_weekend'].values[0],
-        'Is_peak_hour': df['Is_peak_hour'].values[0],
-        'Weather_conditions': input_data.get('weather', 'Sunny'),
-        'Road_traffic_density': input_data.get('traffic', 'Medium'),
-        'Type_of_vehicle': input_data.get('vehicle', 'motorcycle'),
-        'Type_of_order': input_data.get('order_type', 'Meal'),
-        'Festival': input_data.get('festival', 'No'),
-        'City': input_data.get('city', 'Urban'),
-        'Time_period': df['Time_period'].values[0],
-        'Age_group': df['Age_group'].values[0],
-        'Rating_category': df['Rating_category'].values[0]
+def form_options():
+    """Everything the page needs to render inputs that match the API rules."""
+    return {
+        "numeric": NUMERIC_INPUTS,
+        "categorical": {
+            name: {"default": default,
+                   "choices": [(level, DISPLAY_LABELS.get(level, level)) for level in levels]}
+            for name, (levels, default) in CATEGORICAL_INPUTS.items()
+        },
+        "days": list(enumerate(DAY_NAMES)),
     }
 
-    for feature in feature_columns:
-        X[feature] = [feature_mapping.get(feature, 0)]
 
-    # Label Encoding
-    for col in X.select_dtypes(include=['object']).columns:
-        if col in label_encoders:
-            try:
-                X[col] = label_encoders[col].transform(X[col].astype(str))
-            except:
-                X[col] = 0 
-    return X
+def public_model_info(predictor: DeliveryTimePredictor) -> dict:
+    meta = predictor.metadata
+    return {
+        "model_name": meta["model_name"],
+        "trained_at": meta["trained_at"],
+        "training_samples": meta["n_train"],
+        "test_samples": meta["n_test"],
+        "test_metrics": meta["test_metrics"],
+        "cross_validation": {"folds": meta["cv_folds"], **meta["cv"]},
+        "prediction_interval": meta["interval"],
+        "feature_importances": meta["feature_importances"],
+        "model_comparison": meta["comparison"],
+    }
 
-@app.route('/')
-def home():
-    return render_template('index.html', model_info=model_info)
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    try:
-        input_data = request.get_json()
-        
-        # 1. Get Core Inputs
-        prep_time = int(input_data.get('preparation_time', 15))
-        distance = float(input_data.get('distance_km', 5.0))
-        vehicle = input_data.get('vehicle', 'motorcycle')
-        traffic = input_data.get('traffic', 'Low')
-        age = int(input_data.get('delivery_person_age', 30))
-        rating = float(input_data.get('delivery_person_ratings', 4.5))
-        
-        # 2. Get AI Prediction
-        ai_prediction = 0
-        if model:
-            X = prepare_input_features(input_data)
-            ai_prediction = model.predict(X)[0]
-        
-        # 3. Calculate Physics Constraints (The Logic Check)
-        min_travel_time = calculate_minimum_travel_time(distance, vehicle, traffic, age, rating)
-        
-        # Delivery = Prep + Travel + Buffer (Pickup/Dropoff)
-        pickup_buffer = 4 # Minutes
-        min_possible_total_time = prep_time + min_travel_time + pickup_buffer
-        
-        # 4. Final Decision
-        # Use the higher of the two (Physics limit vs AI prediction)
-        final_prediction = max(ai_prediction, min_possible_total_time)
-        
-        # Hard caps for sanity
-        final_prediction = min(180, final_prediction) # Max 3 hours
-        
-        # 5. Format Output
-        uncertainty = 4 
-        predicted_time = float(round(final_prediction, 0))
-        
-        return jsonify({
-            'success': True,
-            'predicted_time': predicted_time,
-            'predicted_time_min': float(round(predicted_time - uncertainty)),
-            'predicted_time_max': float(round(predicted_time + uncertainty)),
-            'message': f'Estimated delivery time: {int(predicted_time)} minutes'
-        })
+def create_app(model_path: Union[str, Path, None] = None) -> Flask:
+    app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # requests are tiny JSON objects
+    app.json.sort_keys = False
+    predictor = load_predictor(model_path or os.environ.get("MODEL_PATH", MODEL_PATH))
 
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 400
+    def model_unavailable():
+        return jsonify(success=False, error="Model is not loaded; the service is unavailable."), 503
 
-@app.route('/health')
-def health():
-    return jsonify({'status': 'healthy'})
+    @app.get("/")
+    def home():
+        info = public_model_info(predictor) if predictor else None
+        return render_template("index.html", model_info=info, form=form_options())
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    @app.post("/predict")
+    def predict():
+        if predictor is None:
+            return model_unavailable()
+        payload = request.get_json(silent=True)
+        if payload is None:
+            return jsonify(success=False, error="Request body must be valid JSON "
+                                                "sent with Content-Type: application/json."), 400
+        try:
+            order = validate_order(payload)
+        except ValidationError as exc:
+            return jsonify(success=False, error="Invalid input.", errors=exc.errors), 400
+
+        result = predictor.predict(order)
+        return jsonify(
+            success=True,
+            **result,
+            message=f"Estimated delivery time: {result['predicted_time']} minutes",
+            model=predictor.model_name,
+            inputs=order,
+        )
+
+    @app.get("/api/model-info")
+    def model_info():
+        if predictor is None:
+            return model_unavailable()
+        return jsonify(public_model_info(predictor))
+
+    @app.get("/health")
+    def health():
+        status = 200 if predictor else 503
+        return jsonify(status="healthy" if predictor else "unhealthy",
+                       model_loaded=predictor is not None,
+                       model=predictor.model_name if predictor else None), status
+
+    @app.errorhandler(HTTPException)
+    def http_error(exc: HTTPException):
+        return jsonify(success=False, error=exc.description), exc.code
+
+    @app.errorhandler(Exception)
+    def unexpected_error(exc: Exception):
+        logger.exception("Unhandled error on %s", request.path)
+        return jsonify(success=False, error="Internal server error."), 500
+
+    return app
+
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
+            debug=os.environ.get("FLASK_DEBUG") == "1")

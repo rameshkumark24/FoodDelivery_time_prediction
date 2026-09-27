@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run tests
+        run: pytest -v
+
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t fooddelivery .
+      - name: Start container on a platform-style PORT
+        run: docker run -d --name app -p 8080:8080 -e PORT=8080 fooddelivery
+      - name: Check health and a prediction
+        run: |
+          for i in $(seq 1 30); do curl -fs localhost:8080/health && break; sleep 1; done
+          curl -fs localhost:8080/health | grep -q '"model_loaded":true'
+          curl -fs -X POST localhost:8080/predict \
+            -H 'Content-Type: application/json' \
+            -d '{"distance_km": 5, "traffic": "High", "order_hour": 13, "day_of_week": 2}' \
+            | tee /dev/stderr | grep -q '"success":true'
+      - name: Container logs
+        if: always()
+        run: docker logs app
